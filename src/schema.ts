@@ -1,21 +1,46 @@
 import type { Rewrite } from "./rewrite";
 
+/**
+ * Allowed subject target for a direct relation (`type` or `type#relation`).
+ * @example
+ * const allowed: AllowedSubject[] = ["user", "group#member"];
+ */
 export type AllowedSubject =
   | string // "user" or "folder"
   | `${string}#${string}`; // "group#member"
 
+/**
+ * Definition for a direct, writable relation.
+ * @example
+ * const owner: DirectRelationDef = { kind: "direct", allowed: ["user"] };
+ */
 export type DirectRelationDef = {
   kind: "direct";
   allowed: AllowedSubject[];
 };
 
+/**
+ * Definition for a derived, computed relation.
+ * @example
+ * const viewer: DerivedRelationDef = { kind: "derived", rewrite: sameObjectRelation("owner") };
+ */
 export type DerivedRelationDef = {
   kind: "derived";
   rewrite: Rewrite;
 };
 
+/**
+ * Union of supported relation definitions.
+ * @example
+ * const rel: RelationDef = relation({ allowed: ["user"] });
+ */
 export type RelationDef = DirectRelationDef | DerivedRelationDef;
 
+/**
+ * Entity definition containing relation map.
+ * @example
+ * const folder = entity({ relations: { owner: relation({ allowed: ["user"] }) } });
+ */
 export type EntityDef<
   TRelations extends Record<string, RelationDef> = Record<string, RelationDef>,
 > = {
@@ -23,36 +48,71 @@ export type EntityDef<
   relations: TRelations;
 };
 
+/**
+ * Schema definition containing all entity types.
+ * @example
+ * const schema = defineSchema({ user: entity(), doc: entity() });
+ */
 export type SchemaDef<
   TEntities extends Record<string, EntityDef> = Record<string, EntityDef>,
 > = {
   entities: TEntities;
 };
 
+/**
+ * Entity name union inferred from a schema.
+ * @example
+ * type Names = EntityName<typeof schema>; // "user" | "doc"
+ */
 export type EntityName<TSchema extends SchemaDef> = Extract<
   keyof TSchema["entities"],
   string
 >;
 
+/**
+ * Relation name union inferred for an entity type.
+ * @example
+ * type DocRelations = RelationName<typeof schema, "doc">;
+ */
 export type RelationName<
   TSchema extends SchemaDef,
   TEntity extends EntityName<TSchema>,
 > = Extract<keyof TSchema["entities"][TEntity]["relations"], string>;
 
+/**
+ * Object ref literal type constrained to schema entity names.
+ * @example
+ * const ref: ObjectRefFor<typeof schema, "doc"> = "doc:123";
+ */
 export type ObjectRefFor<
   TSchema extends SchemaDef,
   TEntity extends EntityName<TSchema> = EntityName<TSchema>,
 > = `${TEntity}:${string}`;
 
+/**
+ * Result returned by schema validation.
+ * @example
+ * const result: SchemaValidationResult = { valid: true, errors: [] };
+ */
 export type SchemaValidationResult = {
   valid: boolean;
   errors: string[];
 };
 
+/**
+ * Options for `defineSchema`.
+ * @example
+ * const options: DefineSchemaOptions = { validate: false };
+ */
 export type DefineSchemaOptions = {
   validate?: boolean;
 };
 
+/**
+ * Creates an entity definition.
+ * @example
+ * const user = entity();
+ */
 export function entity<
   const TRelations extends Record<string, RelationDef> = Record<
     string,
@@ -62,12 +122,22 @@ export function entity<
   return { type: "", relations: (cfg?.relations ?? {}) as TRelations };
 }
 
+/**
+ * Creates a direct relation definition with allowed subject types.
+ * @example
+ * const owner = relation({ allowed: ["user"] });
+ */
 export function relation(cfg: {
   allowed: AllowedSubject[];
 }): DirectRelationDef {
   return { kind: "direct", allowed: cfg.allowed };
 }
 
+/**
+ * Wraps a rewrite expression into a derived relation definition.
+ * @example
+ * const viewer = derived(sameObjectRelation("owner"));
+ */
 export function derived(rewrite: Rewrite): DerivedRelationDef {
   return { kind: "derived", rewrite };
 }
@@ -170,6 +240,11 @@ function validateRewrite(
   }
 }
 
+/**
+ * Validates a schema and returns all discovered errors.
+ * @example
+ * const result = validateSchema(schema);
+ */
 export function validateSchema(schema: SchemaDef): SchemaValidationResult {
   const errors: string[] = [];
 
@@ -233,6 +308,11 @@ export function validateSchema(schema: SchemaDef): SchemaValidationResult {
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * Builds a typed schema map and validates it by default.
+ * @example
+ * const schema = defineSchema({ user: entity(), doc: entity() });
+ */
 export function defineSchema<const TEntities extends Record<string, EntityDef>>(
   entities: TEntities,
   options: DefineSchemaOptions = {},
@@ -267,6 +347,11 @@ export function defineSchema<const TEntities extends Record<string, EntityDef>>(
   return schema;
 }
 
+/**
+ * Gets an entity definition by type and throws when missing.
+ * @example
+ * const userEntity = getEntity(schema, "user");
+ */
 export function getEntity(schema: SchemaDef, type: string): EntityDef;
 export function getEntity<
   TSchema extends SchemaDef,
@@ -277,6 +362,11 @@ export function getEntity<
   return ent;
 }
 
+/**
+ * Gets a relation definition and throws when missing.
+ * @example
+ * const rel = getRelation(schema, "doc", "viewer");
+ */
 export function getRelation(
   schema: SchemaDef,
   objectType: string,

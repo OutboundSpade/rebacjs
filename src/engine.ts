@@ -16,6 +16,11 @@ import {
 } from "./refs";
 import type { Rewrite } from "./rewrite";
 
+/**
+ * Authorization check input with schema-aware object/relation typing.
+ * @example
+ * const req: CheckRequest = { subject: "user:alice", object: "doc:1", relation: "viewer" };
+ */
 export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
   subject: SubjectRef;
 } & {
@@ -25,11 +30,21 @@ export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
   };
 }[EntityName<TSchema>];
 
+/**
+ * Validation result for check requests.
+ * @example
+ * const result: CheckValidationResult = { valid: false, errors: ["Unknown relation"] };
+ */
 export type CheckValidationResult = {
   valid: boolean;
   errors: string[];
 };
 
+/**
+ * Validates object, subject, and relation references for a check request.
+ * @example
+ * const result = validateCheckRequest(schema, { subject: "user:alice", object: "doc:1", relation: "viewer" });
+ */
 export function validateCheckRequest(
   schema: SchemaDef,
   req: { subject: string; object: string; relation: string },
@@ -62,12 +77,22 @@ export function validateCheckRequest(
   return { valid: errors.length === 0, errors };
 }
 
+/**
+ * Execution options for the authorization engine.
+ * @example
+ * const options: EngineOptions = { maxDepth: 64 };
+ */
 export type EngineOptions = {
   maxDepth?: number;
 };
 
 type MemoKey = string;
 
+/**
+ * Core evaluator that resolves direct and derived relation checks.
+ * @example
+ * const engine = new RebacEngine(schema, store, { maxDepth: 32 });
+ */
 export class RebacEngine {
   constructor(
     private readonly schema: SchemaDef,

@@ -21,6 +21,11 @@ import {
   type CheckValidationResult,
 } from "./engine";
 
+/**
+ * Tuple shape accepted by `RebacClient.write`, constrained by schema types.
+ * @example
+ * const tuple: WriteTuple = { object: "doc:1", relation: "viewer", subject: "user:alice" };
+ */
 export type WriteTuple<TSchema extends SchemaDef = SchemaDef> = {
   subject: SubjectRef;
 } & {
@@ -30,6 +35,11 @@ export type WriteTuple<TSchema extends SchemaDef = SchemaDef> = {
   };
 }[EntityName<TSchema>];
 
+/**
+ * High-level API for writing tuples and evaluating authorization checks.
+ * @example
+ * const rebac = new RebacClient({ schema, store: new MemoryTupleStore() });
+ */
 export class RebacClient<TSchema extends SchemaDef = SchemaDef> {
   private engine: RebacEngine;
 
@@ -43,10 +53,20 @@ export class RebacClient<TSchema extends SchemaDef = SchemaDef> {
     this.engine = new RebacEngine(cfg.schema, cfg.store, cfg.options);
   }
 
+  /**
+   * Evaluates whether a subject has a relation on an object.
+   * @example
+   * const ok = await rebac.check({ subject: "user:alice", object: "doc:1", relation: "viewer" });
+   */
   async check(req: CheckRequest<TSchema>): Promise<boolean> {
     return this.engine.check(req);
   }
 
+  /**
+   * Validates a check request and returns explicit errors.
+   * @example
+   * const v = rebac.validateCheck({ subject: "user:alice", object: "doc:1", relation: "viewer" });
+   */
   validateCheck(req: {
     subject: string;
     object: string;
@@ -55,11 +75,21 @@ export class RebacClient<TSchema extends SchemaDef = SchemaDef> {
     return validateCheckRequest(this.cfg.schema, req);
   }
 
+  /**
+   * Writes direct relation tuples after schema validation.
+   * @example
+   * await rebac.write([{ object: "doc:1", relation: "viewer", subject: "user:alice" }]);
+   */
   async write(tuples: WriteTuple<TSchema>[]): Promise<void> {
     this.validateTuples(tuples as Tuple[]);
     await this.cfg.store.write(tuples as Tuple[]);
   }
 
+  /**
+   * Deletes tuples from the underlying store.
+   * @example
+   * await rebac.delete([{ object: "doc:1", relation: "viewer", subject: "user:alice" }]);
+   */
   async delete(tuples: Tuple[]): Promise<void> {
     await this.cfg.store.delete(tuples);
   }

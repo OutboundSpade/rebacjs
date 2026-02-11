@@ -5,6 +5,11 @@ function keyOR(object: string, relation: string) {
   return `${object}|${relation}`;
 }
 
+/**
+ * In-memory tuple store for tests, demos, and local development.
+ * @example
+ * const store = new MemoryTupleStore();
+ */
 export class MemoryTupleStore implements TupleStore {
   // index: (object, relation) -> tuples
   private byOR = new Map<string, Tuple[]>();
