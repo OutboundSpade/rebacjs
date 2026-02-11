@@ -17,6 +17,8 @@ Each example includes:
    - Git hosting style org/team/repo permissions, including merge restrictions.
 4. `b2b-data-room`
    - Partner data room with cross-org sharing and explicit deny rules.
+5. `custom-storage`
+   - Implement a custom `TupleStore` with audit logging and indexing.
 
 ## Running an example
 
