@@ -1,0 +1,214 @@
+import type { SchemaDef } from "./schema";
+import { getRelation } from "./schema";
+import type { TupleStore } from "./storage";
+import {
+  isUsersetRef,
+  parseObjectRef,
+  parseUsersetRef,
+  type ObjectRef,
+  type SubjectRef,
+} from "./refs";
+import type { Rewrite } from "./rewrite";
+
+export type CheckRequest = {
+  user: SubjectRef; // usually "user:alice"
+  object: ObjectRef; // "doc:123"
+  relation: string; // "viewer"
+};
+
+export type EngineOptions = {
+  maxDepth?: number;
+};
+
+type MemoKey = string;
+
+export class RebacEngine {
+  constructor(
+    private readonly schema: SchemaDef,
+    private readonly store: TupleStore,
+    private readonly opts: EngineOptions = {},
+  ) {}
+
+  async check(req: CheckRequest): Promise<boolean> {
+    const maxDepth = this.opts.maxDepth ?? 32;
+    const memo = new Map<MemoKey, boolean>();
+    const visiting = new Set<MemoKey>();
+
+    const checkInner = async (
+      userRef: SubjectRef,
+      objectRef: ObjectRef,
+      relation: string,
+      depth: number,
+    ): Promise<boolean> => {
+      if (depth > maxDepth) return false;
+
+      const memoKey = `${userRef}|${objectRef}|${relation}`;
+      if (memo.has(memoKey)) return memo.get(memoKey)!;
+      if (visiting.has(memoKey)) {
+        // cycle detected; treat as false (or you could throw)
+        return false;
+      }
+
+      visiting.add(memoKey);
+
+      const { type: objType } = parseObjectRef(objectRef);
+      const relDef = getRelation(this.schema, objType, relation);
+
+      let result = false;
+
+      if (relDef.kind === "direct") {
+        result = await this.checkDirect(
+          userRef,
+          objectRef,
+          relation,
+          depth,
+          checkInner,
+        );
+      } else {
+        result = await this.evalRewrite(
+          relDef.rewrite,
+          userRef,
+          objectRef,
+          depth,
+          checkInner,
+        );
+      }
+
+      visiting.delete(memoKey);
+      memo.set(memoKey, result);
+      return result;
+    };
+
+    return checkInner(req.user, req.object, req.relation, 0);
+  }
+
+  private async checkDirect(
+    userRef: SubjectRef,
+    objectRef: ObjectRef,
+    relation: string,
+    depth: number,
+    checkInner: (
+      u: SubjectRef,
+      o: ObjectRef,
+      r: string,
+      d: number,
+    ) => Promise<boolean>,
+  ): Promise<boolean> {
+    const tuples = await this.store.query({ object: objectRef, relation });
+
+    for (const t of tuples) {
+      if (t.subject === userRef) return true;
+
+      // If tuple subject is a userset like "group:eng#member",
+      // then user is related if check(user, "group:eng", "member") is true.
+      if (isUsersetRef(t.subject)) {
+        const { type, id, relation: rel } = parseUsersetRef(t.subject);
+        const targetObject = `${type}:${id}` as ObjectRef;
+        if (await checkInner(userRef, targetObject, rel, depth + 1))
+          return true;
+      }
+    }
+    return false;
+  }
+
+  private async evalRewrite(
+    rewrite: Rewrite,
+    userRef: SubjectRef,
+    objectRef: ObjectRef,
+    depth: number,
+    checkInner: (
+      u: SubjectRef,
+      o: ObjectRef,
+      r: string,
+      d: number,
+    ) => Promise<boolean>,
+  ): Promise<boolean> {
+    switch (rewrite.op) {
+      case "computedUserset":
+        return checkInner(userRef, objectRef, rewrite.relation, depth + 1);
+
+      case "tupleToUserset": {
+        // For each tuple (objectRef, tupleRelation, subject = someObjectRef),
+        // check(user, subjectObjectRef, computedRelation)
+        const tuples = await this.store.query({
+          object: objectRef,
+          relation: rewrite.tupleRelation,
+        });
+        for (const t of tuples) {
+          if (isUsersetRef(t.subject)) {
+            // tuple-to-userset normally expects object refs as subjects.
+            // You can decide to allow usersets, but v0 keeps it strict.
+            continue;
+          }
+          const targetObject = t.subject as ObjectRef;
+          if (
+            await checkInner(
+              userRef,
+              targetObject,
+              rewrite.computedRelation,
+              depth + 1,
+            )
+          )
+            return true;
+        }
+        return false;
+      }
+
+      case "union": {
+        for (const child of rewrite.children) {
+          if (
+            await this.evalRewrite(
+              child,
+              userRef,
+              objectRef,
+              depth + 1,
+              checkInner,
+            )
+          )
+            return true;
+        }
+        return false;
+      }
+
+      case "intersection": {
+        for (const child of rewrite.children) {
+          if (
+            !(await this.evalRewrite(
+              child,
+              userRef,
+              objectRef,
+              depth + 1,
+              checkInner,
+            ))
+          )
+            return false;
+        }
+        return true;
+      }
+
+      case "difference": {
+        const baseOk = await this.evalRewrite(
+          rewrite.base,
+          userRef,
+          objectRef,
+          depth + 1,
+          checkInner,
+        );
+        if (!baseOk) return false;
+        for (const sub of rewrite.subtract) {
+          if (
+            await this.evalRewrite(
+              sub,
+              userRef,
+              objectRef,
+              depth + 1,
+              checkInner,
+            )
+          )
+            return false;
+        }
+        return true;
+      }
+    }
+  }
+}
