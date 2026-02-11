@@ -14,7 +14,12 @@ import {
   parseObjectRef as parseObj,
   type SubjectRef,
 } from "./refs";
-import { RebacEngine, type CheckRequest } from "./engine";
+import {
+  RebacEngine,
+  type CheckRequest,
+  validateCheckRequest,
+  type CheckValidationResult,
+} from "./engine";
 
 export type WriteTuple<TSchema extends SchemaDef = SchemaDef> = {
   subject: SubjectRef;
@@ -40,6 +45,14 @@ export class RebacClient<TSchema extends SchemaDef = SchemaDef> {
 
   async check(req: CheckRequest<TSchema>): Promise<boolean> {
     return this.engine.check(req);
+  }
+
+  validateCheck(req: {
+    user: string;
+    object: string;
+    relation: string;
+  }): CheckValidationResult {
+    return validateCheckRequest(this.cfg.schema, req);
   }
 
   async write(tuples: WriteTuple<TSchema>[]): Promise<void> {

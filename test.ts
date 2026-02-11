@@ -49,8 +49,9 @@ const schema = defineSchema({
     relations: {
       parent: relation({ allowed: ["folder"] }),
       owner: relation({ allowed: ["user"] }),
+      editor: relation({ allowed: ["user"] }),
       viewer: derived(
-        // viewer = owner OR (parent->viewer)
+        // viewer = owner OR (parent->viewer) OR (parent->viewer AND NOT editor)
         union(
           sameObjectRelation("owner"),
           followRelation({ through: "parent", relation: "viewer" }),
@@ -83,9 +84,31 @@ await rebac.write([
 // bob is member of group:eng, group:eng#member is editor of folder:root,
 // viewer(doc:spec) => parent->viewer(folder:root) => viewer => group:eng#member contains bob
 const ok = await rebac.check({
-  subject: user("bob"),
+  user: user("bob"),
   relation: "viewer",
   object: obj("doc", "spec"),
 });
 
 console.log(ok); // true
+
+const invalid = await rebac.check({
+  user: user("bob"),
+  relation: "not_a_relation" as any,
+  object: obj("doc", "spec"),
+});
+
+console.log(invalid); // false
+
+const checkValidation = rebac.validateCheck({
+  user: user("bob"),
+  relation: "not_a_relation",
+  object: obj("doc", "spec"),
+});
+
+console.log(checkValidation.valid); // false
+
+const validCheck = rebac.validateCheck({
+  user: user("bob"),
+  relation: "viewer",
+  object: obj("doc", "spec"),
+});

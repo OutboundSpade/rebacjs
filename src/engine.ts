@@ -11,18 +11,54 @@ import {
   parseObjectRef,
   parseSubjectSetRef,
   type ObjectRef,
+  type SubjectSetRef,
   type SubjectRef,
 } from "./refs";
 import type { Rewrite } from "./rewrite";
 
 export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
-  subject: SubjectRef;
+  user: SubjectRef;
 } & {
   [TEntity in EntityName<TSchema>]: {
     object: ObjectRefFor<TSchema, TEntity>;
     relation: RelationName<TSchema, TEntity>;
   };
 }[EntityName<TSchema>];
+
+export type CheckValidationResult = {
+  valid: boolean;
+  errors: string[];
+};
+
+export function validateCheckRequest(
+  schema: SchemaDef,
+  req: { user: string; object: string; relation: string },
+): CheckValidationResult {
+  const errors: string[] = [];
+
+  try {
+    const { type: objectType } = parseObjectRef(req.object as ObjectRef);
+    getRelation(schema, objectType, req.relation);
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  try {
+    if (isSubjectSetRef(req.user)) {
+      const { type, relation } = parseSubjectSetRef(req.user as SubjectSetRef);
+      getRelation(schema, type, relation);
+    } else {
+      const { type } = parseObjectRef(req.user as ObjectRef);
+      if (!schema.entities[type]) {
+        errors.push(`Unknown entity type '${type}'`);
+      }
+    }
+  } catch (err) {
+    errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  return { valid: errors.length === 0, errors };
+}
 
 export type EngineOptions = {
   maxDepth?: number;
@@ -38,56 +74,63 @@ export class RebacEngine {
   ) {}
 
   async check(req: CheckRequest): Promise<boolean> {
-    const maxDepth = this.opts.maxDepth ?? 32;
-    const memo = new Map<MemoKey, boolean>();
-    const visiting = new Set<MemoKey>();
+    const validation = validateCheckRequest(this.schema, req);
+    if (!validation.valid) return false;
 
-    const checkInner = async (
-      userRef: SubjectRef,
-      objectRef: ObjectRef,
-      relation: string,
-      depth: number,
-    ): Promise<boolean> => {
-      if (depth > maxDepth) return false;
+    try {
+      const maxDepth = this.opts.maxDepth ?? 32;
+      const memo = new Map<MemoKey, boolean>();
+      const visiting = new Set<MemoKey>();
 
-      const memoKey = `${userRef}|${objectRef}|${relation}`;
-      if (memo.has(memoKey)) return memo.get(memoKey)!;
-      if (visiting.has(memoKey)) {
-        // cycle detected; treat as false (or you could throw)
-        return false;
-      }
+      const checkInner = async (
+        userRef: SubjectRef,
+        objectRef: ObjectRef,
+        relation: string,
+        depth: number,
+      ): Promise<boolean> => {
+        if (depth > maxDepth) return false;
 
-      visiting.add(memoKey);
+        const memoKey = `${userRef}|${objectRef}|${relation}`;
+        if (memo.has(memoKey)) return memo.get(memoKey)!;
+        if (visiting.has(memoKey)) {
+          // cycle detected; treat as false (or you could throw)
+          return false;
+        }
 
-      const { type: objType } = parseObjectRef(objectRef);
-      const relDef = getRelation(this.schema, objType, relation);
+        visiting.add(memoKey);
 
-      let result = false;
+        const { type: objType } = parseObjectRef(objectRef);
+        const relDef = getRelation(this.schema, objType, relation);
 
-      if (relDef.kind === "direct") {
-        result = await this.checkDirect(
-          userRef,
-          objectRef,
-          relation,
-          depth,
-          checkInner,
-        );
-      } else {
-        result = await this.evalRewrite(
-          relDef.rewrite,
-          userRef,
-          objectRef,
-          depth,
-          checkInner,
-        );
-      }
+        let result = false;
 
-      visiting.delete(memoKey);
-      memo.set(memoKey, result);
-      return result;
-    };
+        if (relDef.kind === "direct") {
+          result = await this.checkDirect(
+            userRef,
+            objectRef,
+            relation,
+            depth,
+            checkInner,
+          );
+        } else {
+          result = await this.evalRewrite(
+            relDef.rewrite,
+            userRef,
+            objectRef,
+            depth,
+            checkInner,
+          );
+        }
 
-    return checkInner(req.subject, req.object, req.relation, 0);
+        visiting.delete(memoKey);
+        memo.set(memoKey, result);
+        return result;
+      };
+
+      return checkInner(req.user, req.object, req.relation, 0);
+    } catch {
+      return false;
+    }
   }
 
   private async checkDirect(
