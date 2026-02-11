@@ -9,7 +9,13 @@
     "url": "https://github.com/OutboundSpade/rebacjs",
     "type": "git"
   },
-  "version": "0.0.2",
+  "version": "0.0.2-0",
+  "keywords": [
+    "access control",
+    "authorization",
+    "rbac",
+    "rebac"
+  ],
   "scripts": {
     "test": "jest"
   },
