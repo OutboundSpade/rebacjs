@@ -48,7 +48,7 @@ export class RebacClient<TSchema extends SchemaDef = SchemaDef> {
   }
 
   validateCheck(req: {
-    user: string;
+    subject: string;
     object: string;
     relation: string;
   }): CheckValidationResult {

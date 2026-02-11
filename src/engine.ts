@@ -17,7 +17,7 @@ import {
 import type { Rewrite } from "./rewrite";
 
 export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
-  user: SubjectRef;
+  subject: SubjectRef;
 } & {
   [TEntity in EntityName<TSchema>]: {
     object: ObjectRefFor<TSchema, TEntity>;
@@ -32,7 +32,7 @@ export type CheckValidationResult = {
 
 export function validateCheckRequest(
   schema: SchemaDef,
-  req: { user: string; object: string; relation: string },
+  req: { subject: string; object: string; relation: string },
 ): CheckValidationResult {
   const errors: string[] = [];
 
@@ -44,11 +44,13 @@ export function validateCheckRequest(
   }
 
   try {
-    if (isSubjectSetRef(req.user)) {
-      const { type, relation } = parseSubjectSetRef(req.user as SubjectSetRef);
+    if (isSubjectSetRef(req.subject)) {
+      const { type, relation } = parseSubjectSetRef(
+        req.subject as SubjectSetRef,
+      );
       getRelation(schema, type, relation);
     } else {
-      const { type } = parseObjectRef(req.user as ObjectRef);
+      const { type } = parseObjectRef(req.subject as ObjectRef);
       if (!schema.entities[type]) {
         errors.push(`Unknown entity type '${type}'`);
       }
@@ -83,14 +85,14 @@ export class RebacEngine {
       const visiting = new Set<MemoKey>();
 
       const checkInner = async (
-        userRef: SubjectRef,
+        subjectRef: SubjectRef,
         objectRef: ObjectRef,
         relation: string,
         depth: number,
       ): Promise<boolean> => {
         if (depth > maxDepth) return false;
 
-        const memoKey = `${userRef}|${objectRef}|${relation}`;
+        const memoKey = `${subjectRef}|${objectRef}|${relation}`;
         if (memo.has(memoKey)) return memo.get(memoKey)!;
         if (visiting.has(memoKey)) {
           // cycle detected; treat as false (or you could throw)
@@ -106,7 +108,7 @@ export class RebacEngine {
 
         if (relDef.kind === "direct") {
           result = await this.checkDirect(
-            userRef,
+            subjectRef,
             objectRef,
             relation,
             depth,
@@ -115,7 +117,7 @@ export class RebacEngine {
         } else {
           result = await this.evalRewrite(
             relDef.rewrite,
-            userRef,
+            subjectRef,
             objectRef,
             depth,
             checkInner,
@@ -127,14 +129,14 @@ export class RebacEngine {
         return result;
       };
 
-      return checkInner(req.user, req.object, req.relation, 0);
+      return checkInner(req.subject, req.object, req.relation, 0);
     } catch {
       return false;
     }
   }
 
   private async checkDirect(
-    userRef: SubjectRef,
+    subjectRef: SubjectRef,
     objectRef: ObjectRef,
     relation: string,
     depth: number,
@@ -148,14 +150,14 @@ export class RebacEngine {
     const tuples = await this.store.query({ object: objectRef, relation });
 
     for (const t of tuples) {
-      if (t.subject === userRef) return true;
+      if (t.subject === subjectRef) return true;
 
       // If tuple subject is a subject-set like "group:eng#member",
       // then user is related if check(user, "group:eng", "member") is true.
       if (isSubjectSetRef(t.subject)) {
         const { type, id, relation: rel } = parseSubjectSetRef(t.subject);
         const targetObject = `${type}:${id}` as ObjectRef;
-        if (await checkInner(userRef, targetObject, rel, depth + 1))
+        if (await checkInner(subjectRef, targetObject, rel, depth + 1))
           return true;
       }
     }
@@ -164,7 +166,7 @@ export class RebacEngine {
 
   private async evalRewrite(
     rewrite: Rewrite,
-    userRef: SubjectRef,
+    subjectRef: SubjectRef,
     objectRef: ObjectRef,
     depth: number,
     checkInner: (
@@ -176,11 +178,11 @@ export class RebacEngine {
   ): Promise<boolean> {
     switch (rewrite.op) {
       case "sameObjectRelation":
-        return checkInner(userRef, objectRef, rewrite.relation, depth + 1);
+        return checkInner(subjectRef, objectRef, rewrite.relation, depth + 1);
 
       case "followRelation": {
         // For each tuple (objectRef, through, subject = someObjectRef),
-        // check(user, subjectObjectRef, relation)
+        // check(subject, subjectObjectRef, relation)
         const tuples = await this.store.query({
           object: objectRef,
           relation: rewrite.through,
@@ -193,7 +195,12 @@ export class RebacEngine {
           }
           const targetObject = t.subject as ObjectRef;
           if (
-            await checkInner(userRef, targetObject, rewrite.relation, depth + 1)
+            await checkInner(
+              subjectRef,
+              targetObject,
+              rewrite.relation,
+              depth + 1,
+            )
           )
             return true;
         }
@@ -205,7 +212,7 @@ export class RebacEngine {
           if (
             await this.evalRewrite(
               child,
-              userRef,
+              subjectRef,
               objectRef,
               depth + 1,
               checkInner,
@@ -221,7 +228,7 @@ export class RebacEngine {
           if (
             !(await this.evalRewrite(
               child,
-              userRef,
+              subjectRef,
               objectRef,
               depth + 1,
               checkInner,
@@ -235,7 +242,7 @@ export class RebacEngine {
       case "difference": {
         const baseOk = await this.evalRewrite(
           rewrite.base,
-          userRef,
+          subjectRef,
           objectRef,
           depth + 1,
           checkInner,
@@ -245,7 +252,7 @@ export class RebacEngine {
           if (
             await this.evalRewrite(
               sub,
-              userRef,
+              subjectRef,
               objectRef,
               depth + 1,
               checkInner,
