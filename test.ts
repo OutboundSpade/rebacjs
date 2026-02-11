@@ -11,9 +11,10 @@ import {
   MemoryTupleStore,
   RebacClient,
   obj,
-  user,
   subjectSet,
 } from "./src/index";
+
+const user = (id: string) => obj("user", id);
 
 const schema = defineSchema({
   user: entity(),
@@ -82,9 +83,9 @@ await rebac.write([
 // bob is member of group:eng, group:eng#member is editor of folder:root,
 // viewer(doc:spec) => parent->viewer(folder:root) => viewer => group:eng#member contains bob
 const ok = await rebac.check({
-  user: user("bob"),
-  object: obj("doc", "spec"),
+  subject: user("bob"),
   relation: "viewer",
+  object: obj("doc", "spec"),
 });
 
 console.log(ok); // true

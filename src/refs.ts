@@ -9,10 +9,6 @@ export function obj<TType extends string>(
   return `${type}:${id}`;
 }
 
-export function user(id: string): `user:${string}` {
-  return `user:${id}`;
-}
-
 export function subjectSet<TType extends string, TRel extends string>(
   type: TType,
   id: string,

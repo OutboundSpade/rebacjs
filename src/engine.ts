@@ -16,7 +16,7 @@ import {
 import type { Rewrite } from "./rewrite";
 
 export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
-  user: SubjectRef;
+  subject: SubjectRef;
 } & {
   [TEntity in EntityName<TSchema>]: {
     object: ObjectRefFor<TSchema, TEntity>;
@@ -87,7 +87,7 @@ export class RebacEngine {
       return result;
     };
 
-    return checkInner(req.user, req.object, req.relation, 0);
+    return checkInner(req.subject, req.object, req.relation, 0);
   }
 
   private async checkDirect(
