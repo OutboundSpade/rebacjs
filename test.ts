@@ -6,19 +6,19 @@ import {
   union,
   intersection,
   difference,
-  computedUserset,
-  tupleToUserset,
+  sameObjectRelation,
+  followRelation,
   MemoryTupleStore,
   RebacClient,
   obj,
   user,
-  userset,
+  subjectSet,
 } from "./src/index";
 
 const schema = defineSchema({
-  user: entity("user"),
+  user: entity(),
 
-  group: entity("group", {
+  group: entity({
     relations: {
       member: relation({
         // group:eng#member can directly contain user:alice
@@ -27,7 +27,7 @@ const schema = defineSchema({
     },
   }),
 
-  folder: entity("folder", {
+  folder: entity({
     relations: {
       parent: relation({ allowed: ["folder"] }),
       owner: relation({ allowed: ["user"] }),
@@ -36,20 +36,24 @@ const schema = defineSchema({
       // viewer = owner OR editor OR (parent->viewer)
       viewer: derived(
         union(
-          computedUserset("owner"),
-          computedUserset("editor"),
-          tupleToUserset("parent", "viewer"),
+          sameObjectRelation("owner"),
+          sameObjectRelation("editor"),
+          followRelation({ through: "parent", relation: "viewer" }),
         ),
       ),
     },
   }),
 
-  doc: entity("doc", {
+  doc: entity({
     relations: {
       parent: relation({ allowed: ["folder"] }),
       owner: relation({ allowed: ["user"] }),
       viewer: derived(
-        union(computedUserset("owner"), tupleToUserset("parent", "viewer")),
+        // viewer = owner OR (parent->viewer)
+        union(
+          sameObjectRelation("owner"),
+          followRelation({ through: "parent", relation: "viewer" }),
+        ),
       ),
     },
   }),
@@ -65,7 +69,7 @@ await rebac.write([
   {
     object: obj("folder", "root"),
     relation: "editor",
-    subject: userset("group", "eng", "member"),
+    subject: subjectSet("group", "eng", "member"),
   },
   {
     object: obj("doc", "spec"),
@@ -76,11 +80,11 @@ await rebac.write([
 
 // Check: does bob have viewer on doc:spec ?
 // bob is member of group:eng, group:eng#member is editor of folder:root,
-// viewer(doc:spec) => parent->viewer(folder:root) => editor => group:eng#member contains bob
+// viewer(doc:spec) => parent->viewer(folder:root) => viewer => group:eng#member contains bob
 const ok = await rebac.check({
   user: user("bob"),
   object: obj("doc", "spec"),
-  relation: "editor",
+  relation: "viewer",
 });
 
 console.log(ok); // true

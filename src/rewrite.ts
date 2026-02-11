@@ -1,22 +1,22 @@
 export type Rewrite =
-  | { op: "computedUserset"; relation: string }
-  | { op: "tupleToUserset"; tupleRelation: string; computedRelation: string }
+  | { op: "sameObjectRelation"; relation: string }
+  | { op: "followRelation"; through: string; relation: string }
   | { op: "union"; children: Rewrite[] }
   | { op: "intersection"; children: Rewrite[] }
   | { op: "difference"; base: Rewrite; subtract: Rewrite[] };
 
-export const computedUserset = (relation: string): Rewrite => ({
-  op: "computedUserset",
+export const sameObjectRelation = (relation: string): Rewrite => ({
+  op: "sameObjectRelation",
   relation,
 });
 
-export const tupleToUserset = (
-  tupleRelation: string,
-  computedRelation: string,
-): Rewrite => ({
-  op: "tupleToUserset",
-  tupleRelation,
-  computedRelation,
+export const followRelation = (cfg: {
+  through: string;
+  relation: string;
+}): Rewrite => ({
+  op: "followRelation",
+  through: cfg.through,
+  relation: cfg.relation,
 });
 
 export const union = (...children: Rewrite[]): Rewrite => ({

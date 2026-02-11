@@ -15,7 +15,7 @@ export class MemoryTupleStore implements TupleStore {
       const arr = this.byOR.get(k) ?? [];
       // naive dedupe
       if (!arr.some((x) => x.subject === t.subject)) {
-        arr.push(t);
+        arr.push({ ...t });
       }
       this.byOR.set(k, arr);
     }
@@ -36,8 +36,11 @@ export class MemoryTupleStore implements TupleStore {
     // Fast path: object+relation query (most checks).
     if (q.object && q.relation) {
       const arr = this.byOR.get(keyOR(q.object, q.relation)) ?? [];
-      if (q.subject) return arr.filter((t) => t.subject === q.subject);
-      return [...arr];
+      if (q.subject)
+        return arr
+          .filter((t) => t.subject === q.subject)
+          .map((t) => ({ ...t }));
+      return arr.map((t) => ({ ...t }));
     }
 
     // Slow path scan (still fine for a memory backend)
@@ -47,7 +50,7 @@ export class MemoryTupleStore implements TupleStore {
         if (q.object && t.object !== q.object) continue;
         if (q.relation && t.relation !== q.relation) continue;
         if (q.subject && t.subject !== q.subject) continue;
-        out.push(t);
+        out.push({ ...t });
       }
     }
     return out;

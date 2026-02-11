@@ -16,20 +16,41 @@ export type DerivedRelationDef = {
 
 export type RelationDef = DirectRelationDef | DerivedRelationDef;
 
-export type EntityDef = {
+export type EntityDef<
+  TRelations extends Record<string, RelationDef> = Record<string, RelationDef>,
+> = {
   type: string;
-  relations: Record<string, RelationDef>;
+  relations: TRelations;
 };
 
-export type SchemaDef = {
-  entities: Record<string, EntityDef>;
+export type SchemaDef<
+  TEntities extends Record<string, EntityDef> = Record<string, EntityDef>,
+> = {
+  entities: TEntities;
 };
 
-export function entity(
-  type: string,
-  cfg?: { relations?: Record<string, RelationDef> },
-): EntityDef {
-  return { type, relations: cfg?.relations ?? {} };
+export type EntityName<TSchema extends SchemaDef> = Extract<
+  keyof TSchema["entities"],
+  string
+>;
+
+export type RelationName<
+  TSchema extends SchemaDef,
+  TEntity extends EntityName<TSchema>,
+> = Extract<keyof TSchema["entities"][TEntity]["relations"], string>;
+
+export type ObjectRefFor<
+  TSchema extends SchemaDef,
+  TEntity extends EntityName<TSchema> = EntityName<TSchema>,
+> = `${TEntity}:${string}`;
+
+export function entity<
+  const TRelations extends Record<string, RelationDef> = Record<
+    string,
+    RelationDef
+  >,
+>(cfg?: { relations?: TRelations }): EntityDef<TRelations> {
+  return { type: "", relations: (cfg?.relations ?? {}) as TRelations };
 }
 
 export function relation(cfg: {
@@ -42,17 +63,36 @@ export function derived(rewrite: Rewrite): DerivedRelationDef {
   return { kind: "derived", rewrite };
 }
 
-export function defineSchema(entities: Record<string, EntityDef>): SchemaDef {
-  const map: Record<string, EntityDef> = {};
-  for (const [k, def] of Object.entries(entities)) {
-    // allow either key or def.type as canonical type, but prefer def.type
-    map[def.type ?? k] = def;
+export function defineSchema<const TEntities extends Record<string, EntityDef>>(
+  entities: TEntities,
+): SchemaDef<{
+  [K in keyof TEntities]: EntityDef<TEntities[K]["relations"]> & {
+    type: Extract<K, string>;
+  };
+}> {
+  const map = {} as {
+    [K in keyof TEntities]: EntityDef<TEntities[K]["relations"]> & {
+      type: Extract<K, string>;
+    };
+  };
+
+  for (const key of Object.keys(entities) as (keyof TEntities)[]) {
+    const def = entities[key];
+    map[key] = {
+      ...def,
+      type: key as Extract<typeof key, string>,
+    };
   }
+
   return { entities: map };
 }
 
-export function getEntity(schema: SchemaDef, type: string): EntityDef {
-  const ent = schema.entities[type];
+export function getEntity(schema: SchemaDef, type: string): EntityDef;
+export function getEntity<
+  TSchema extends SchemaDef,
+  TType extends EntityName<TSchema>,
+>(schema: TSchema, type: TType): TSchema["entities"][TType] {
+  const ent = schema.entities[type] as TSchema["entities"][TType] | undefined;
   if (!ent) throw new Error(`Unknown entity type '${type}'`);
   return ent;
 }

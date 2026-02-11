@@ -1,6 +1,6 @@
 export type ObjectRef = `${string}:${string}`; // "doc:123"
-export type UsersetRef = `${string}:${string}#${string}`; // "group:eng#member"
-export type SubjectRef = ObjectRef | UsersetRef;
+export type SubjectSetRef = `${string}:${string}#${string}`; // "group:eng#member"
+export type SubjectRef = ObjectRef | SubjectSetRef;
 
 export function obj<TType extends string>(
   type: TType,
@@ -13,7 +13,7 @@ export function user(id: string): `user:${string}` {
   return `user:${id}`;
 }
 
-export function userset<TType extends string, TRel extends string>(
+export function subjectSet<TType extends string, TRel extends string>(
   type: TType,
   id: string,
   rel: TRel,
@@ -21,7 +21,7 @@ export function userset<TType extends string, TRel extends string>(
   return `${type}:${id}#${rel}`;
 }
 
-export function isUsersetRef(s: string): s is UsersetRef {
+export function isSubjectSetRef(s: string): s is SubjectSetRef {
   return s.includes("#");
 }
 
@@ -31,7 +31,7 @@ export function parseObjectRef(ref: ObjectRef): { type: string; id: string } {
   return { type: ref.slice(0, idx), id: ref.slice(idx + 1) };
 }
 
-export function parseUsersetRef(ref: UsersetRef): {
+export function parseSubjectSetRef(ref: SubjectSetRef): {
   type: string;
   id: string;
   relation: string;
@@ -40,6 +40,6 @@ export function parseUsersetRef(ref: UsersetRef): {
   const base = ref.slice(0, hash) as ObjectRef;
   const { type, id } = parseObjectRef(base);
   const relation = ref.slice(hash + 1);
-  if (!relation) throw new Error(`Invalid userset ref: ${ref}`);
+  if (!relation) throw new Error(`Invalid subject-set ref: ${ref}`);
   return { type, id, relation };
 }

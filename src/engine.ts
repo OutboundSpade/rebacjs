@@ -1,20 +1,28 @@
-import type { SchemaDef } from "./schema";
+import type {
+  EntityName,
+  ObjectRefFor,
+  RelationName,
+  SchemaDef,
+} from "./schema";
 import { getRelation } from "./schema";
 import type { TupleStore } from "./storage";
 import {
-  isUsersetRef,
+  isSubjectSetRef,
   parseObjectRef,
-  parseUsersetRef,
+  parseSubjectSetRef,
   type ObjectRef,
   type SubjectRef,
 } from "./refs";
 import type { Rewrite } from "./rewrite";
 
-export type CheckRequest = {
-  user: SubjectRef; // usually "user:alice"
-  object: ObjectRef; // "doc:123"
-  relation: string; // "viewer"
-};
+export type CheckRequest<TSchema extends SchemaDef = SchemaDef> = {
+  user: SubjectRef;
+} & {
+  [TEntity in EntityName<TSchema>]: {
+    object: ObjectRefFor<TSchema, TEntity>;
+    relation: RelationName<TSchema, TEntity>;
+  };
+}[EntityName<TSchema>];
 
 export type EngineOptions = {
   maxDepth?: number;
@@ -99,10 +107,10 @@ export class RebacEngine {
     for (const t of tuples) {
       if (t.subject === userRef) return true;
 
-      // If tuple subject is a userset like "group:eng#member",
+      // If tuple subject is a subject-set like "group:eng#member",
       // then user is related if check(user, "group:eng", "member") is true.
-      if (isUsersetRef(t.subject)) {
-        const { type, id, relation: rel } = parseUsersetRef(t.subject);
+      if (isSubjectSetRef(t.subject)) {
+        const { type, id, relation: rel } = parseSubjectSetRef(t.subject);
         const targetObject = `${type}:${id}` as ObjectRef;
         if (await checkInner(userRef, targetObject, rel, depth + 1))
           return true;
@@ -124,30 +132,25 @@ export class RebacEngine {
     ) => Promise<boolean>,
   ): Promise<boolean> {
     switch (rewrite.op) {
-      case "computedUserset":
+      case "sameObjectRelation":
         return checkInner(userRef, objectRef, rewrite.relation, depth + 1);
 
-      case "tupleToUserset": {
-        // For each tuple (objectRef, tupleRelation, subject = someObjectRef),
-        // check(user, subjectObjectRef, computedRelation)
+      case "followRelation": {
+        // For each tuple (objectRef, through, subject = someObjectRef),
+        // check(user, subjectObjectRef, relation)
         const tuples = await this.store.query({
           object: objectRef,
-          relation: rewrite.tupleRelation,
+          relation: rewrite.through,
         });
         for (const t of tuples) {
-          if (isUsersetRef(t.subject)) {
-            // tuple-to-userset normally expects object refs as subjects.
-            // You can decide to allow usersets, but v0 keeps it strict.
+          if (isSubjectSetRef(t.subject)) {
+            // Relation-following normally expects object refs as subjects.
+            // You can decide to allow subject sets, but v0 keeps it strict.
             continue;
           }
           const targetObject = t.subject as ObjectRef;
           if (
-            await checkInner(
-              userRef,
-              targetObject,
-              rewrite.computedRelation,
-              depth + 1,
-            )
+            await checkInner(userRef, targetObject, rewrite.relation, depth + 1)
           )
             return true;
         }
