@@ -9,7 +9,7 @@
     "url": "https://github.com/OutboundSpade/rebacjs",
     "type": "git"
   },
-  "version": "0.0.1",
+  "version": "0.0.2",
   "scripts": {
     "test": "jest"
   },
