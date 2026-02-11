@@ -34,7 +34,7 @@ import {
   sameObjectRelation,
   subjectSet,
   union,
-} from "./";
+} from "rebacjs";
 
 const schema = defineSchema({
   user: entity(),
