@@ -2,9 +2,14 @@
   "name": "rebacjs",
   "module": "src/index.ts",
   "type": "module",
+  "author": {
+    "name": "OutboundSpade"
+  },
+  "version": "0.0.1",
   "scripts": {
     "test": "jest"
   },
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/bun": "latest",
     "@types/jest": "^29.5.14",
