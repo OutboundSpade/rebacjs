@@ -9,7 +9,7 @@
     "url": "https://github.com/OutboundSpade/rebacjs",
     "type": "git"
   },
-  "version": "0.0.2-0",
+  "version": "0.0.2-1",
   "keywords": [
     "access control",
     "authorization",
@@ -29,5 +29,10 @@
   },
   "peerDependencies": {
     "typescript": "^5.9.3"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
   }
 }
